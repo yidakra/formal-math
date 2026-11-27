@@ -16,15 +16,6 @@ namespace Nc.Grp
 
 open Finset
 
-theorem segL_eq' (sep : List Bool) (f : ℕ) (tk : Bool) (cur : List Bool) (fs : List ℕ) (as rest out : List (List Bool)) :
-    segL sep f tk cur fs as rest out =
-      (if okFlag f tk then closeL sep cur fs as rest out else []) ++
-      match rest with
-      | [] => []
-      | a :: r => segL sep f true (a ++ cur) fs as r out := by
-  rw [segL.eq_def]
-  cases fs <;> cases rest <;> rfl
-
 variable {A : Type} [CommRing A]
 
 /-- The sum over the number of letters that are taken. -/
@@ -34,12 +25,12 @@ theorem sum_segL (sep : List Bool) (f : ℕ) (tk : Bool) (cur : List Bool) (fs :
         ((closeL sep ((rest.take j).reverse.flatten ++ cur) fs as (rest.drop j) out).map G).sum else 0 := by
   induction rest generalizing tk cur with
   | nil =>
-    rw [segL_eq']
+    rw [segL_eq, takeL]
     simp only [List.append_nil, List.length_nil, zero_add, range_one, sum_singleton, lt_self_iff_false,
       decide_false, Bool.or_false, List.take_nil, List.reverse_nil, List.flatten_nil, List.nil_append, List.drop_nil]
     split_ifs <;> simp
   | cons a r ih =>
-    rw [segL_eq', List.map_append, List.sum_append, sum_range_succ']
+    rw [segL_eq, takeL, List.map_append, List.sum_append, sum_range_succ']
     simp only [ih, List.length_cons, lt_self_iff_false, decide_false, Bool.or_false, List.take_zero,
       List.reverse_nil, List.flatten_nil, List.nil_append, List.drop_zero, List.take_succ_cons, List.drop_succ_cons,
       List.reverse_cons, List.flatten_append, List.flatten_cons, List.append_nil, List.append_assoc, Bool.true_or,
@@ -65,70 +56,44 @@ theorem sum_cut {m : ℕ} (T : ℕ) (l : List Γ) (hT : l.length ≤ T) (p : Fin
           H (Fin.snoc X (l.drop (l.length - j))) else 0 := by
   have hinit : ∀ X : Fin (m + 1) → List Γ, cat X = cat (Fin.init X) ++ X (Fin.last m) := by
     intro X
-    conv_lhs => rw [← Fin.snoc_init_self X]
-    rw [cat_snoc]
+    simpa only [Fin.snoc_init_self] using cat_snoc (Fin.init X) (X (Fin.last m))
   have hdrop : ∀ X : Fin (m + 1) → List Γ, cat X = l →
       cat (Fin.init X) = l.take (l.length - (X (Fin.last m)).length) ∧
       X (Fin.last m) = l.drop (l.length - (X (Fin.last m)).length) := by
     intro X hX
-    rw [hinit] at hX
-    have h1 : l.length = (cat (Fin.init X)).length + (X (Fin.last m)).length := by rw [← hX, List.length_append]
-    have h2 : l.length - (X (Fin.last m)).length = (cat (Fin.init X)).length := by omega
-    rw [h2, ← hX]
+    subst l
+    rw [hinit, List.length_append, Nat.add_sub_cancel]
     simp
   rw [← sum_fiberwise_of_maps_to (s := (Fintype.piFinset fun _ : Fin (m + 1) => wordsLe Γ T).filter
     (fun X => cat X = l ∧ ∀ b, p b (X b))) (t := range (l.length + 1)) (g := fun X => (X (Fin.last m)).length)]
   · refine sum_congr rfl fun j hj => ?_
     rw [mem_range] at hj
+    have hlast (X : Fin (m + 1) → List Γ) (hl : cat X = l) (hj : (X (Fin.last m)).length = j) :
+        X (Fin.last m) = l.drop (l.length - j) := hj ▸ (hdrop X hl).2
     split_ifs with hp
-    · refine sum_nbij' (i := fun X => Fin.init X) (j := fun X => Fin.snoc X (l.drop (l.length - j))) ?_ ?_ ?_ ?_ ?_
+    · refine sum_nbij' (i := fun X => Fin.init X)
+        (j := fun X => Fin.snoc X (l.drop (l.length - j)))
+        ?_ ?_ ?_ (fun X _ => Fin.init_snoc _ _) ?_
       · intro X hX
         simp only [mem_filter, Fintype.mem_piFinset] at hX ⊢
         obtain ⟨⟨h1, h2, h3⟩, h4⟩ := hX
-        refine ⟨fun b => h1 _, ?_, fun b => h3 _⟩
-        rw [← h4]
-        exact (hdrop X h2).1
+        exact ⟨fun b => h1 _, h4 ▸ (hdrop X h2).1, fun b => h3 _⟩
       · intro X hX
-        simp only [mem_filter, Fintype.mem_piFinset] at hX ⊢
-        obtain ⟨h1, h2, h3⟩ := hX
-        refine ⟨⟨?_, ?_, ?_⟩, ?_⟩
-        · intro b
-          refine Fin.lastCases ?_ (fun b => ?_) b
-          · rw [Fin.snoc_last, mem_wordsLe, List.length_drop]
-            omega
-          · rw [Fin.snoc_castSucc]
-            exact h1 b
-        · rw [cat_snoc, h2, List.take_append_drop]
-        · intro b
-          refine Fin.lastCases ?_ (fun b => ?_) b
-          · rw [Fin.snoc_last]
-            exact hp
-          · rw [Fin.snoc_castSucc]
-            exact h3 b
-        · rw [Fin.snoc_last, List.length_drop]
-          omega
-      · intro X hX
-        simp only [mem_filter] at hX
-        obtain ⟨⟨-, h2, -⟩, h4⟩ := hX
-        have := (hdrop X h2).2
-        rw [h4] at this
-        rw [← this, Fin.snoc_init_self]
-      · intro X _
-        exact Fin.init_snoc _ _
-      · intro X hX
-        simp only [mem_filter] at hX
-        obtain ⟨⟨-, h2, -⟩, h4⟩ := hX
-        have := (hdrop X h2).2
-        rw [h4] at this
-        rw [← this, Fin.snoc_init_self]
+        obtain ⟨h1, h2, h3⟩ := mem_filter.1 hX
+        have hlen : (l.drop (l.length - j)).length = j := by rw [List.length_drop]; omega
+        simp only [mem_filter, Fintype.mem_piFinset, Fin.forall_fin_succ', Fin.snoc_castSucc,
+          Fin.snoc_last, cat_snoc, h2, List.take_append_drop, hp, hlen, and_true, true_and]
+        exact ⟨⟨Fintype.mem_piFinset.1 h1, mem_wordsLe.2 (by omega)⟩, h3⟩
+      all_goals
+        intro X hX
+        obtain ⟨⟨-, hl, -⟩, hj⟩ := (by simpa only [mem_filter] using hX)
+        rw [← hlast X hl hj, Fin.snoc_init_self]
     · refine sum_eq_zero fun X hX => ?_
       simp only [mem_filter] at hX
       obtain ⟨⟨-, h2, h3⟩, h4⟩ := hX
       exfalso
       apply hp
-      have := (hdrop X h2).2
-      rw [h4] at this
-      rw [← this]
+      rw [← hlast X h2 h4]
       exact h3 _
   · intro X hX
     simp only [mem_filter] at hX
@@ -156,58 +121,37 @@ theorem sum_segL_start (sep : List Bool) (bits : Γ → List Bool) (T : ℕ) {m 
     ∑ X ∈ (Fintype.piFinset fun _ : Fin (m + 1) => wordsLe Γ T).filter
       (fun X => cat X = l ∧ ∀ b, okFlag (fl b) (decide (X b ≠ [])) = true),
       G ((List.ofFn fun b => (X b).flatMap bits ++ (sep ++ acc b)) ++ out) := by
-  induction m generalizing l out with
+  rw [sum_segL, sum_cut T l hT (fun b x => okFlag (fl b) (decide (x ≠ [])) = true),
+    List.length_reverse, List.length_map]
+  refine sum_congr rfl fun j hj => ?_
+  rw [mem_range] at hj
+  have e1 : decide (l.drop (l.length - j) ≠ []) = decide (0 < j) := by
+    apply decide_eq_decide.2
+    rw [← List.length_pos_iff, List.length_drop]
+    omega
+  simp only [Bool.false_or, e1]
+  refine if_congr Iff.rfl ?_ rfl
+  rw [take_rev, drop_rev]
+  cases m with
   | zero =>
-    rw [sum_segL, sum_cut T l hT (fun b x => okFlag (fl b) (decide (x ≠ [])) = true), List.length_reverse,
-      List.length_map]
-    refine sum_congr rfl fun j hj => ?_
-    rw [mem_range] at hj
-    have e1 : decide (l.drop (l.length - j) ≠ []) = decide (0 < j) := by
-      apply decide_eq_decide.2
-      rw [← List.length_pos_iff, List.length_drop]
-      omega
-    simp only [Bool.false_or, e1]
-    refine if_congr Iff.rfl ?_ rfl
-    rw [take_rev, drop_rev]
-    simp only [List.ofFn_zero, List.reverse_nil, closeL]
-    have e2 : ∀ X : Fin 0 → List Γ, cat X = [] := fun X => by simp [cat]
+    have e : ∀ X : Fin 0 → List Γ, cat X = [] := fun X => by simp [cat]
+    have last (X : Fin 0 → List Γ) (y : List Γ) : (Fin.snoc X y : Fin 1 → List Γ) 0 = y :=
+      Fin.snoc_last (α := fun _ => List Γ) y X
     by_cases h : l.take (l.length - j) = []
-    · rw [if_pos (by rw [h]; rfl), Finset.sum_eq_single (fun b : Fin 0 => b.elim0)]
-      · have e3 : ∀ (X : Fin 0 → List Γ) (y : List Γ), (Fin.snoc X y : Fin 1 → List Γ) 0 = y :=
-          fun X y => Fin.snoc_last (α := fun _ => List Γ) y X
-        simp [List.ofFn_succ, e3]
-      · intro X _ hX
-        exact absurd (Subsingleton.elim _ _) hX
-      · intro hX
-        exfalso
-        apply hX
-        rw [mem_filter, Fintype.mem_piFinset]
-        exact ⟨fun b => b.elim0, by rw [e2, h], fun b => b.elim0⟩
-    · rw [if_neg (by simpa using h), Finset.sum_eq_zero]
-      · rfl
-      · intro X hX
-        simp only [mem_filter, e2] at hX
-        exact absurd hX.2.1.symm h
-  | succ m ih =>
-    rw [sum_segL, sum_cut T l hT (fun b x => okFlag (fl b) (decide (x ≠ [])) = true), List.length_reverse,
-      List.length_map]
-    refine sum_congr rfl fun j hj => ?_
-    rw [mem_range] at hj
-    have e1 : decide (l.drop (l.length - j) ≠ []) = decide (0 < j) := by
-      apply decide_eq_decide.2
-      rw [← List.length_pos_iff, List.length_drop]
-      omega
-    simp only [Bool.false_or, e1]
-    refine if_congr Iff.rfl ?_ rfl
-    rw [take_rev, drop_rev, ofFn_rev, ofFn_rev, closeL]
-    have h := ih (fun b => fl b.castSucc) (fun b => acc b.castSucc) (l.take (l.length - j))
-      ((List.length_take_le _ _).trans ((Nat.sub_le _ _).trans hT))
-      (((l.drop (l.length - j)).flatMap bits ++ (sep ++ acc (Fin.last (m + 1)))) :: out)
+    · simp [closeL, e, h, List.ofFn_succ, last]
+    · have hne : ¬ (l.length - j = 0 ∨ l = []) := by simpa using h
+      simp [closeL, e, Ne.symm h, hne]
+  | succ m =>
+    rw [ofFn_rev, ofFn_rev, closeL]
+    have h := sum_segL_start sep bits T (fun b => fl b.castSucc) (fun b => acc b.castSucc)
+      (l.take (l.length - j)) ((List.length_take_le' _ _).trans hT)
+      (((l.drop (l.length - j)).flatMap bits ++ (sep ++ acc (Fin.last (m + 1)))) :: out) G
     simp only [List.headD_cons, List.tail_cons]
     rw [h]
     refine sum_congr rfl fun X _ => ?_
     rw [List.ofFn_succ' (n := m + 1)]
     simp
+termination_by m
 
 /-- **The sum over the ways to cut a word.** -/
 theorem sum_segRow' (sep : List Bool) {m : ℕ} (hm : 0 < m) (fl : Fin m → ℕ) (acc : Fin m → List Bool)
