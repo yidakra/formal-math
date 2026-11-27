@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        candidate: [cuts-grw-181, circuit-bounds]
+        candidate: [tower-child-sum]
     steps:
       - uses: actions/checkout@v4
         with:
