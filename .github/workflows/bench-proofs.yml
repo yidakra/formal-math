@@ -1,0 +1,66 @@
+name: Proof timings on the contributor fork
+on:
+  push:
+    branches: [bench-proof-changes]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    if: github.repository == 'yidakra/formal-math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        candidate: [cuts-grw-181, circuit-bounds]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7b2d5d572cf2f832ca581ebacbb961209abaf889
+          path: base
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.candidate }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: kongeskog/math-compress/.github/actions/setup-hc@cab0cb425697b543445ba75cd16067a284c23091
+      - name: Install the pinned toolchain
+        working-directory: base/vp-vnp
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 -o "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.3/elan-x86_64-unknown-linux-gnu.tar.gz
+          echo "df0b2b3a439961ffcbb3985214365ffe40f49bc871df04dff268c7d8e21ca8b2  $RUNNER_TEMP/elan.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lean" --version
+      - name: Fetch dependencies and build main
+        working-directory: base/vp-vnp
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if lake exe cache get; then break; fi
+            if [[ "$attempt" = 3 ]]; then exit 1; fi
+            sleep 15
+          done
+          lake build
+      - name: Seed and build the candidate
+        working-directory: candidate/vp-vnp
+        run: |
+          set -euo pipefail
+          base="$GITHUB_WORKSPACE/base/vp-vnp/.lake"
+          mkdir -p .lake
+          ln -s "$base/packages" .lake/packages
+          cp -a --reflink=auto "$base/build" .lake/build
+          lake build
+      - name: Alternate base and candidate on this runner
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          echo "Base $(git -C ../base rev-parse HEAD) · change $(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          hc time --base ../base --base-ref "$(git -C ../base rev-parse HEAD)" --runs 5 --markdown | tee -a "$GITHUB_STEP_SUMMARY"
