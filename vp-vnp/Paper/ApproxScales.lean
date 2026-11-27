@@ -392,7 +392,8 @@ theorem prop_approx_acc_scales {h : ℕ} (hh : 17 ≤ h) {C₀ v₀ : ℕ} (hcut
     ∃ C v₁ : ℕ, ∀ v, v₁ ≤ v → ∀ a, lg v ^ (C * a) ≤ v → ∀ (E : Type) [CommRing E] [Algebra A E]
       (K : KT E[T;T⁻¹]) (B : ℕ) (D : Tree), IsAccA θ (16 * h) v (v ^ (16 * h - 16)) K B D ∧ K.nds ≤ v ^ a ∧
         D.size ≤ v ^ a ∧ K.ht ≤ lg (max (v ^ (16 * h)) (v ^ a)) ^ 2 ∧ B ≤ lg (max (v ^ (16 * h)) (v ^ a)) ^ 3 →
-      ∃ U Δ cΔ b₀ : ℕ, ∀ n, ∃ (u : ℕ) (K' : KT E[T;T⁻¹]) (B' : ℕ) (D' : Tree), n ≤ u ∧
+      ∃ U Δ cΔ b₀ : ℕ, LargeScale h (2 * (100000 * h ^ 3)) U ∧
+        ∀ n, ∃ (u : ℕ) (K' : KT E[T;T⁻¹]) (B' : ℕ) (D' : Tree), n ≤ u ∧
         InvA θ h (100000 * h ^ 3) U Δ cΔ b₀ u K' B' D' ∧ IsAccA θ (16 * h) u (u ^ (16 * h - 17)) K' B' D' ∧
         K.Inherits A K' := by
   generalize hcB : 100000 * h ^ 3 = cB
@@ -403,7 +404,7 @@ theorem prop_approx_acc_scales {h : ℕ} (hh : 17 ≤ h) {C₀ v₀ : ℕ} (hcut
   have hh3 : h ≤ h ^ 3 := Nat.le_self_pow (by norm_num) h
   have hL : LargeScale h (2 * cB) U := ⟨by omega, by rw [hcs]; omega, fun u hu => hn2 u (by omega), by omega⟩
   generalize hCdef : 2 * C₀ + 40 = C
-  obtain ⟨n3, hn3⟩ := poly_lg 1 (C * 10)
+  obtain ⟨n3, hn3⟩ := poly_lg 1 (C * 5)
   generalize hcc : 1000 * (7000 * h ^ 3) ^ 3 = cc
   refine ⟨2 * C, U + n3 + 2 ^ cc, fun v hv a ha E _ _ K B D hacc => ?_⟩
   have hpc : 1 ≤ 2 ^ cc := Nat.one_le_two_pow
@@ -413,37 +414,27 @@ theorem prop_approx_acc_scales {h : ℕ} (hh : 17 ≤ h) {C₀ v₀ : ℕ} (hcut
   have hn3v := hn3 v (by omega)
   generalize hl : lg v = l
   rw [hl] at ha hl2 hlcc hn3v
-  generalize hα : a + 5 = α
+  -- Both exponents meet the logarithmic bound, so we can take their maximum.
+  generalize hα : max (2 * a) 5 = α
   have hlog : l ^ (C * α) ≤ v := by
-    refine (Nat.pow_le_pow_iff_left (show 2 ≠ 0 by norm_num)).1 ?_
-    calc (l ^ (C * α)) ^ 2 = l ^ (2 * C * a) * (1 * l ^ (C * 10)) := by
-          rw [one_mul, ← pow_mul, ← pow_add, ← hα]; congr 1; ring
-      _ ≤ v * v := Nat.mul_le_mul ha hn3v
-      _ = v ^ 2 := (pow_two v).symm
+    rcases le_total (2 * a) 5 with h | h
+    · simpa [← hα, max_eq_right h] using hn3v
+    · simpa [← hα, max_eq_left h, mul_assoc, mul_left_comm] using ha
   have hl1 : 1 ≤ l := by omega
-  have hαl : α ≤ l ^ α := (Nat.lt_two_pow_self (n := α)).le.trans (Nat.pow_le_pow_left hl2 α)
+  have hαl : α ≤ l ^ α := Nat.lt_two_pow_self.le.trans (Nat.pow_le_pow_left hl2 α)
   have hbig : 1000 * (7000 * (h * α * l) ^ 3) ^ 3 ≤ v := by
-    have s1 : cc ≤ l ^ α := hlcc.trans (Nat.le_self_pow (by omega) l)
-    have s2 : α ^ 9 ≤ l ^ (9 * α) := by
-      rw [Nat.mul_comm, pow_mul]
-      exact Nat.pow_le_pow_left hαl 9
-    have s3 : l ^ 9 ≤ l ^ (9 * α) := Nat.pow_le_pow_right hl1 (by omega)
-    calc 1000 * (7000 * (h * α * l) ^ 3) ^ 3 = cc * (α ^ 9 * l ^ 9) := by rw [← hcc]; ring
-      _ ≤ l ^ α * (l ^ (9 * α) * l ^ (9 * α)) := Nat.mul_le_mul s1 (Nat.mul_le_mul s2 s3)
-      _ = l ^ (19 * α) := by rw [← pow_add, ← pow_add]; congr 1; ring
-      _ ≤ l ^ (C * α) := Nat.pow_le_pow_right hl1 (Nat.mul_le_mul_right _ (by omega))
-      _ ≤ v := hlog
+    refine le_trans ?_ hlog
+    rw [show 1000 * (7000 * (h * α * l) ^ 3) ^ 3 = cc * α ^ 9 * l ^ 9 by rw [← hcc]; ring]
+    grw [hlcc, hαl, ← pow_mul, ← pow_succ', ← pow_add]
+    have := Nat.mul_le_mul_right α (show 19 ≤ C by omega)
+    exact Nat.pow_le_pow_right hl1 (by omega)
   have hcutv : CutAt θ (16 * h) v (2 * α) := hcut.at (by omega) (by
-    rw [hl]
-    refine (Nat.pow_le_pow_right hl1 ?_).trans hlog
-    have : C * α = C₀ * (2 * α) + 40 * α := by rw [← hCdef]; ring
-    omega)
-  obtain ⟨Δ, cΔ, b₀, K, B, D, hcΔ, hI⟩ := prop_approx_acc_first (U := U) hh hcutv (by omega) (by omega)
-    (hL.cst_le.trans hUv) hUv (by rw [hl]; exact hbig) hacc
+    rw [hl, ← Nat.mul_assoc]
+    exact (Nat.pow_le_pow_right hl1 (Nat.mul_le_mul_right _ (by omega))).trans hlog)
   obtain ⟨Δ, cΔ, b₀, K', B', D', hcΔ, hI, hK⟩ := prop_approx_acc_first (U := U) hh hcutv (by omega) (by omega)
     (hL.cst_le.trans hUv) hUv (by rw [hl]; exact hbig) hacc
   rw [hcB] at hI hcΔ
-  refine ⟨U, Δ, cΔ, b₀, fun n => ?_⟩
+  refine ⟨U, Δ, cΔ, b₀, hL, fun n => ?_⟩
   obtain ⟨u, K'', B'', D'', hn, hI', hA, hK'⟩ := prop_approx_acc_all_scales (hI := hI) hh
     (fun u hu => hcut.at (by omega) (by simpa using hn1 u (by omega))) hL (by omega) hcΔ n
   exact ⟨u, K'', B'', D'', hn, hI', hA, fun P hP h => hK' P hP (hK P hP h)⟩
@@ -457,14 +448,13 @@ theorem thm_noacc {h : ℕ} (hh : 17 ≤ h) [Algebra.FiniteType ℤ A] {C₀ v�
     ∃ C v₁ : ℕ, ∀ v, v₁ ≤ v → ∀ a, lg v ^ (C * a) ≤ v → ∀ (R : Type) [CommRing R] [Nontrivial R] [Algebra A R],
       ¬ HasAcc θ R (16 * h) v (v ^ a) := by
   obtain ⟨C, v₁, hsc⟩ := prop_approx_acc_scales hh hcut
-  obtain ⟨n9, hn9⟩ := poly_lg (1000 * (3 * (100000 * h ^ 3)) ^ 3) 9
   refine ⟨C, v₁, fun v hv a ha R _ _ _ hacc => ?_⟩
   obtain ⟨K, B, D, hD, hKn, hDs, hKh, hB⟩ := hacc
   obtain ⟨E, _, _, _, K', hD', hn', hh'⟩ := thm_noacc_finite_field hD
   obtain ⟨M, red, hM, hred⟩ := thm_noacc_periodic E
-  obtain ⟨U, Δ, cΔ, b₀, hall⟩ := hsc v hv a ha E _ B D
+  obtain ⟨U, Δ, cΔ, b₀, hL, hall⟩ := hsc v hv a ha E _ B D
     ⟨hD'.toA, by rw [KT.nds_map]; omega, hDs, by rw [KT.ht_map]; omega, hB⟩
-  obtain ⟨u, K₁, B', D', hu, hI, -, hK⟩ := hall (2 ^ (M + 2000 * h) + cst + n9)
+  obtain ⟨u, K₁, B', D', hu, hI, -, hK⟩ := hall (2 ^ (M + 10))
   obtain ⟨K₂, rfl⟩ := KT.exists_lift_all _ (hK _ (fun r _ ⟨e, he⟩ => ⟨e, by rw [← he, rescale_cstL]⟩)
     (KT.all_map_range _ K'))
   have hn := hI.nds
@@ -472,31 +462,19 @@ theorem thm_noacc {h : ℕ} (hh : 17 ≤ h) [Algebra.FiniteType ℤ A] {C₀ v�
   have hB' := hI.B_le
   rw [KT.nds_map] at hn
   rw [KT.ht_map] at hht
-  generalize hcs : cst = cs
-  rw [hcs] at hu
-  have hp : 1 ≤ 2 ^ (M + 2000 * h) := Nat.one_le_two_pow
-  have hu1 : 1 ≤ u := by omega
-  have hl : M + 2000 * h + 1 ≤ lg u := le_lg_of_two_pow_le (by omega)
-  have hlt := lt_two_pow_lg u
-  have hsmall := hn9 u (by omega)
-  generalize hL : lg u = L
-  rw [hL] at hl hlt hsmall hht hB'
-  refine thm_noacc_diagonal hh hI.acc.toT (by omega) hn hI.size hM hred (J := 16 * h * L)
-    (X := K₂.ht + max B' M + 16 * h * L + 10) ?_ (by omega) (by omega) ?_
-  · rw [Nat.mul_comm (16 * h) L, pow_mul]
-    calc u ^ (16 * h - 15) ≤ u ^ (16 * h) := pow_le_pow hu1 (by omega)
-      _ < (2 ^ L) ^ (16 * h) := Nat.pow_lt_pow_left hlt (by omega)
-  · refine le_trans (Nat.mul_le_mul_left _ (Nat.pow_le_pow_left (m := 3 * (100000 * h ^ 3) * L ^ 3) ?_ 3))
-      (le_trans (le_of_eq ?_) hsmall)
-    · have h1 : 17 * (h * L) ≤ 100000 * (h ^ 3 * L ^ 3) :=
-        Nat.mul_le_mul (by norm_num)
-          (Nat.mul_le_mul (Nat.le_self_pow (by norm_num) h) (Nat.le_self_pow (by norm_num) L))
-      have h2 : L ≤ h * L := Nat.le_mul_of_pos_left _ (by omega)
-      have e1 : 16 * h * L = 16 * (h * L) := by ring
-      have e2 : 3 * (100000 * h ^ 3) * L ^ 3 = 3 * (100000 * (h ^ 3 * L ^ 3)) := by ring
-      have e3 : 100000 * h ^ 3 * L ^ 3 = 100000 * (h ^ 3 * L ^ 3) := by ring
-      omega
-    · ring
+  have hl : M + 10 + 1 ≤ lg u := le_lg_of_two_pow_le hu
+  have hu1 : 1 ≤ u := le_trans (by norm_num) (hL.two.trans hI.big)
+  refine thm_noacc_diagonal hh hI.acc.toT (hL.cst_le.trans hI.big) hn hI.size hM hred
+    (J := 16 * h * lg u) (X := K₂.ht + max B' M + 16 * h * lg u + 10) ?_ (by omega) (by omega) ?_
+  · rw [Nat.mul_comm (16 * h), pow_mul]
+    exact (pow_le_pow hu1 (Nat.sub_le _ _)).trans_lt
+      (Nat.pow_lt_pow_left (lt_two_pow_lg u) (by omega))
+  · apply cube_le hL hI.big
+    rw [Nat.mul_assoc 3, Nat.mul_assoc 2]
+    have hJ : 16 * h * lg u ≤ 100000 * h ^ 3 * lg u ^ 3 := Nat.mul_le_mul
+      (by have := Nat.le_self_pow (by decide : 3 ≠ 0) h; omega) (Nat.le_self_pow (by decide) _)
+    have := Nat.le_mul_of_pos_left (lg u) (show 0 < 16 * h by omega)
+    omega
 
 /-- **Paper: Proposition prop:approx-acc.** "Theorem thm:noacc holds for approximate accelerators." An approximate
 accelerator has constants in R[ε,ε⁻¹] and values in pv(z) + ε R[ε]; here R is any nonzero commutative A-algebra. -/
@@ -508,7 +486,7 @@ theorem prop_approx_acc [Algebra.FiniteType ℤ A] {h : ℕ} (hh : 17 ≤ h)
   obtain ⟨C, v₁, hsc⟩ := prop_approx_acc_scales hh hcut
   refine ⟨C, v₁, fun v hv a ha E _ _ _ hacc => ?_⟩
   obtain ⟨K, B, D, hacc⟩ := hacc
-  obtain ⟨U, Δ, cΔ, b₀, hall⟩ := hsc v hv a ha E K B D hacc
+  obtain ⟨U, Δ, cΔ, b₀, -, hall⟩ := hsc v hv a ha E K B D hacc
   -- a scale that is large against Δ, cΔ and b₀
   generalize ha₀ : 4400 * h + 6 = a₀
   obtain ⟨n4, hn4⟩ := poly_lg 1 (Ce * a₀)
